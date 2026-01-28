@@ -188,11 +188,11 @@ def simulate_single_price_path_gjr_garch_t(
         return np.array([current_price], dtype=float)
 
     params: Dict[str, Any] = model_state.get("params", {})
-    bt.logging.info(f"params: {params}")
+    # bt.logging.info(f"params: {params}")
     mu, omega, alpha, gamma, beta = _extract_gjr_garch_params(params)
     nu = _extract_t_df(params)
 
-    bt.logging.info(f"nu: {nu}")
+    # bt.logging.info(f"nu: {nu}")
 
     last_sigma = float(model_state.get("last_sigma", 0.0))
     if last_sigma <= 0.0:
