@@ -1,3 +1,5 @@
+import bittensor as bt
+
 from synth.miner.price_simulation import (
     get_asset_price,
     simulate_crypto_price_paths_gbm,
@@ -48,6 +50,18 @@ def generate_simulations(
         current_price = get_asset_price(asset)
     if current_price is None:
         raise ValueError(f"Failed to fetch current price for asset: {asset}")
+
+    # Log the anchor price and key parameters used for this batch of simulations.
+    bt.logging.info(
+        "generate_simulations: asset=%s, current_price=%.8f, "
+        "num_simulations=%d, time_increment=%d, time_length=%d, start_time=%s",
+        asset,
+        current_price,
+        num_simulations,
+        time_increment,
+        time_length,
+        start_time,
+    )
 
     sigma = SIGMA_MAP.get(asset, 0.005)  # Default sigma if asset not found
 
