@@ -22,6 +22,34 @@ TOKEN_MAP = {
     "GOOGLX": "b911b0329028cd0283e4259c33809d62942bd2716a58084e5f31d64c00b5424e",
 }
 
+# Baseline per-asset volatility scales, mirroring SIGMA_MAP in
+# synth/miner/simulations.py. These are used only to derive reasonable
+# per-asset clamps for simulated volatility and returns.
+ASSET_BASE_SIGMA = {
+    "BTC": 0.00472,
+    "ETH": 0.00695,
+    "XAU": 0.00208,
+    "SOL": 0.00782,
+    "SPYX": 0.00156,
+    "NVDAX": 0.00342,
+    "TSLAX": 0.00332,
+    "AAPLX": 0.00250,
+    "GOOGLX": 0.00332,
+}
+
+
+def _get_asset_vol_scale(asset: str) -> float:
+    """
+    Return a baseline per-step volatility scale in \"percent\" units
+    for the given asset, used to set asset-specific clamps.
+
+    We treat ASSET_BASE_SIGMA values as approximate per-step
+    volatility in log-return space and multiply by 100 to express
+    them in percent-like units compatible with r_t.
+    """
+    base = ASSET_BASE_SIGMA.get(asset, 0.005)
+    return base * 100.0
+
 pyth_base_url = "https://hermes.pyth.network/v2/updates/price/latest"
 
 
@@ -178,6 +206,14 @@ def simulate_single_price_path_gjr_garch_t(
     r_prev = 0.0
     logged_overflow_warning = False
 
+    # Derive asset-specific clamps from the baseline volatility scale.
+    # base_vol_pct is an approximate per-step volatility in percent units.
+    base_vol_pct = _get_asset_vol_scale(asset)
+    # Max conditional volatility (in same units as r_t) as a multiple of base.
+    sigma_t_max = 10.0 * base_vol_pct
+    # Max per-step return magnitude (in percent) as a multiple of base.
+    r_t_max = 20.0 * base_vol_pct
+
     for t in range(1, num_steps + 1):
         # Draw standardized Student-t shock.
         eps = np.random.standard_t(nu)
@@ -185,12 +221,19 @@ def simulate_single_price_path_gjr_garch_t(
         # Returns were trained in percent space; keep the same convention.
         r_t = mu + sigma_t * eps
 
-        # Log large or non-finite return components once per path, each value individually.
+        # Clamp the simulated return per asset to avoid extreme per-step moves.
+        if not np.isfinite(r_t):
+            # Fallback to a large but finite move before clipping.
+            r_t = np.sign(r_t) * r_t_max
+        else:
+            r_t = float(np.clip(r_t, -r_t_max, r_t_max))
+
+        # Log large return components once per path to help debug clamping.
         if (
             not logged_overflow_warning
-            and (not np.isfinite(r_t) or abs(r_t) > 1_000)
+            and abs(r_t) > 0.5 * r_t_max
         ):
-            bt.logging.warning("GJR-GARCH step overflow risk: asset=%s, t=%d", asset, t)
+            bt.logging.warning("GJR-GARCH step clamp: asset=%s, t=%d", asset, t)
             bt.logging.warning("  mu=%s", mu)
             bt.logging.warning("  sigma_t=%s", sigma_t)
             bt.logging.warning("  eps=%s", eps)
@@ -210,6 +253,8 @@ def simulate_single_price_path_gjr_garch_t(
         )
         var_next = max(var_next, 1e-12)
         sigma_t = float(np.sqrt(var_next))
+        # Clamp conditional volatility to avoid explosive sigma_t.
+        sigma_t = float(min(sigma_t, sigma_t_max))
         r_prev = r_t
 
     return prices
