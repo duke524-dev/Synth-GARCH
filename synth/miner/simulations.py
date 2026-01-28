@@ -1,10 +1,9 @@
 from synth.miner.price_simulation import (
-    simulate_crypto_price_paths,
     get_asset_price,
+    simulate_crypto_price_paths_gbm,
+    simulate_crypto_price_paths_gjr_garch,
 )
-from synth.utils.helpers import (
-    convert_prices_to_time_format,
-)
+from synth.utils.helpers import convert_prices_to_time_format
 
 SIGMA_MAP = {
     "BTC": 0.00472,
@@ -25,6 +24,7 @@ def generate_simulations(
     time_increment=300,
     time_length=86400,
     num_simulations=1,
+    current_price: float | None = None,
 ):
     """
     Generate simulated price paths.
@@ -35,26 +35,41 @@ def generate_simulations(
         time_increment (int): Time increment in seconds.
         time_length (int): Total time length in seconds.
         num_simulations (int): Number of simulation runs.
+        current_price (float | None): If provided, use as anchor price and skip
+            Pyth fetch. Used for offline backtests with a past start_time.
 
     Returns:
-        numpy.ndarray: Simulated price paths.
+        tuple: (start_unix, time_increment, path1, path2, ...) per convert_prices_to_time_format.
     """
     if start_time == "":
         raise ValueError("Start time must be provided.")
 
-    current_price = get_asset_price(asset)
+    if current_price is None:
+        current_price = get_asset_price(asset)
     if current_price is None:
         raise ValueError(f"Failed to fetch current price for asset: {asset}")
 
     sigma = SIGMA_MAP.get(asset, 0.005)  # Default sigma if asset not found
 
-    simulations = simulate_crypto_price_paths(
-        current_price=current_price,
-        time_increment=time_increment,
-        time_length=time_length,
-        num_simulations=num_simulations,
-        sigma=sigma,
-    )
+    # Try to use a trained GJR-GARCH(1,1)-t model when available.
+    # If loading or simulation fails, fall back to the original GBM-based
+    # simulator using a fixed sigma.
+    try:
+        simulations = simulate_crypto_price_paths_gjr_garch(
+            current_price=current_price,
+            time_increment=time_increment,
+            time_length=time_length,
+            num_simulations=num_simulations,
+            asset=asset,
+        )
+    except Exception:
+        simulations = simulate_crypto_price_paths_gbm(
+            current_price=current_price,
+            time_increment=time_increment,
+            time_length=time_length,
+            num_simulations=num_simulations,
+            sigma=sigma,
+        )
 
     predictions = convert_prices_to_time_format(
         simulations.tolist(), start_time, time_increment

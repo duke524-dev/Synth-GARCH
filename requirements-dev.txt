@@ -9,3 +9,6 @@ mypy-extensions==1.0.0
 pandas-stubs==2.2.2.240807
 types-requests==2.32.0.20250328
 Flake8-pyproject==1.2.3
+arch>=6.0.0
+pyarrow>=18.0.0
+yfinance>=0.2.50
