@@ -211,14 +211,70 @@ def recalibrate_one(spec: ModelSpec, end_dt: datetime | None) -> None:
     )
 
     returns = load_returns(spec.asset, spec.freq)
-    window_ret = slice_last_window(returns, spec.window_days, end_dt=end_dt)
+    # Try one or more window lengths, and for LF models prefer fits with
+    # persistence (alpha + beta) below a stability threshold.
+    candidate_windows = [spec.window_days]
+    # For LF models, also try a shorter window as a fallback if the first fit
+    # is too persistent.
+    if spec.label == "LF":
+        candidate_windows.append(max(30, spec.window_days // 2))
 
-    if spec.label == "HF":
-        res, sigma = fit_gjr_garch_t(window_ret)
-    else:
-        res, sigma = fit_garch_t(window_ret)
+    last_exc: Exception | None = None
+    for window_days in candidate_windows:
+        try:
+            window_ret = slice_last_window(
+                returns, window_days, end_dt=end_dt
+            )
 
-    save_model_result(spec, res, sigma, scale=FIT_SCALE)
+            if spec.label == "HF":
+                res, sigma = fit_gjr_garch_t(window_ret)
+            else:
+                res, sigma = fit_garch_t(window_ret)
+
+            # For LF models, check GARCH persistence and reject models that
+            # are too close to non-stationary (alpha + beta ≫ 1).
+            if spec.label == "LF":
+                params: Dict[str, Any] = res.params.to_dict()
+                alpha = float(
+                    params.get(
+                        "alpha[1]",
+                        params.get("alpha1", params.get("alpha", 0.0)),
+                    )
+                )
+                beta = float(
+                    params.get(
+                        "beta[1]",
+                        params.get("beta1", params.get("beta", 0.0)),
+                    )
+                )
+                persistence = alpha + beta
+
+                # If too persistent, try the next candidate window.
+                if persistence > 0.99:
+                    print(
+                        f"  [{spec.asset} {spec.label}] "
+                        f"persistence too high (alpha+beta={persistence:.4f}) "
+                        f"for window {window_days}d, trying alternative window."
+                    )
+                    continue
+
+            # Good enough: record the window actually used and save.
+            spec.window_days = window_days
+            save_model_result(spec, res, sigma, scale=FIT_SCALE)
+            return
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            continue
+
+    # If we reach here, either all fits failed or all LF fits were too
+    # persistent for the candidate windows.
+    if last_exc is not None:
+        raise RuntimeError(
+            f"Could not find stable model for {spec.asset} [{spec.label}]"
+        ) from last_exc
+    raise RuntimeError(
+        f"Could not find stable model for {spec.asset} [{spec.label}]"
+    )
 
 
 def build_specs(

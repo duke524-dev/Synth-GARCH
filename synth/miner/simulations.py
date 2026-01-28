@@ -52,15 +52,15 @@ def generate_simulations(
         raise ValueError(f"Failed to fetch current price for asset: {asset}")
 
     # Log the anchor price and key parameters used for this batch of simulations.
+    # Use a fully formatted string to avoid issues with mismatched %-placeholders
+    # in downstream logging handlers.
     bt.logging.info(
-        "generate_simulations: asset=%s, current_price=%.8f, "
-        "num_simulations=%d, time_increment=%d, time_length=%d, start_time=%s",
-        asset,
-        current_price,
-        num_simulations,
-        time_increment,
-        time_length,
-        start_time,
+        f"{asset} - generate_simulations: asset={asset}, "
+        f"current_price={current_price:.8f}, "
+        f"num_simulations={num_simulations}, "
+        f"time_increment={time_increment}, "
+        f"time_length={time_length}, "
+        f"start_time={start_time}"
     )
 
     sigma = SIGMA_MAP.get(asset, 0.005)  # Default sigma if asset not found

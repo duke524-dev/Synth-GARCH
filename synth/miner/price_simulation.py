@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
+import bittensor as bt
 import numpy as np
 import requests
 from tenacity import retry, stop_after_attempt, wait_random_exponential
@@ -159,8 +160,11 @@ def simulate_single_price_path_gjr_garch_t(
         return np.array([current_price], dtype=float)
 
     params: Dict[str, Any] = model_state.get("params", {})
+    bt.logging.info(f"params: {params}")
     mu, omega, alpha, gamma, beta = _extract_gjr_garch_params(params)
     nu = _extract_t_df(params)
+
+    bt.logging.info(f"nu: {nu}")
 
     last_sigma = float(model_state.get("last_sigma", 0.0))
     if last_sigma <= 0.0:
@@ -172,6 +176,7 @@ def simulate_single_price_path_gjr_garch_t(
 
     sigma_t = last_sigma
     r_prev = 0.0
+    logged_overflow_warning = False
 
     for t in range(1, num_steps + 1):
         # Draw standardized Student-t shock.
@@ -179,6 +184,18 @@ def simulate_single_price_path_gjr_garch_t(
 
         # Returns were trained in percent space; keep the same convention.
         r_t = mu + sigma_t * eps
+
+        # Log large or non-finite return components once per path, each value individually.
+        if (
+            not logged_overflow_warning
+            and (not np.isfinite(r_t) or abs(r_t) > 1_000)
+        ):
+            bt.logging.warning("GJR-GARCH step overflow risk: asset=%s, t=%d", asset, t)
+            bt.logging.warning("  mu=%s", mu)
+            bt.logging.warning("  sigma_t=%s", sigma_t)
+            bt.logging.warning("  eps=%s", eps)
+            bt.logging.warning("  r_t=%s", r_t)
+            logged_overflow_warning = True
 
         # Update price using log-returns (percent to fraction).
         prices[t] = prices[t - 1] * np.exp(r_t / 100.0)

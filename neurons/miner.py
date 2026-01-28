@@ -69,16 +69,14 @@ class Miner(BaseMinerNeuron):
             # Log a compact summary of the response shape and a small sample.
             head_sample = paths[0][:3] if num_paths > 0 and len(paths[0]) >= 3 else []
             tail_sample = paths[0][-3:] if num_paths > 0 and len(paths[0]) >= 3 else []
+
+            # Preformat the message string to avoid %-formatting type errors in
+            # the logging backend when lists or unexpected types are passed.
             bt.logging.info(
-                "Miner response summary: asset=%s, start_unix=%s, dt=%s, "
-                "num_paths=%d, path_len=%d, first_path_head=%s, first_path_tail=%s",
-                asset,
-                start_unix,
-                dt,
-                num_paths,
-                path_len,
-                head_sample,
-                tail_sample,
+                f"{asset} - Miner response summary: "
+                f"asset={asset}, start_unix={start_unix}, dt={dt}, "
+                f"num_paths={num_paths}, path_len={path_len}, "
+                f"first_path_head={head_sample}, first_path_tail={tail_sample}"
             )
         except Exception as e:  # noqa: BLE001
             bt.logging.warning(f"Failed to log miner response summary: {e}")
