@@ -33,3 +33,15 @@ validator:
 		--logging.$(logging_level) \
 		--neuron.axon_off true \
 		--ewma.window_days $(ewma_window_days) \
+
+# Miner: start with PM2 using miner.config.js
+miner:
+	pm2 start miner.config.js
+
+# Recalibration daemon (real-time): fetch + recalibrate when period elapsed
+recalibrate-daemon:
+	./scripts/cron_recalibrate.sh --daemon
+
+# Miner + recalibration daemon: both via PM2 (run from project root)
+miner-and-recalibrate:
+	pm2 start miner-and-recalibrate.config.js
