@@ -41,17 +41,47 @@ class Miner(BaseMinerNeuron):
 
     async def forward_miner(self, synapse: Simulation) -> Simulation:
         simulation_input = synapse.simulation_input
+        asset = simulation_input.asset
         bt.logging.info(
-            f"Received prediction request from: {synapse.dendrite.hotkey} for timestamp: {simulation_input.start_time}"
+            f"Received prediction request from: {synapse.dendrite.hotkey} "
+            f"for asset={asset}, start_time={simulation_input.start_time}, "
+            f"time_increment={simulation_input.time_increment}, "
+            f"time_length={simulation_input.time_length}, "
+            f"num_simulations={simulation_input.num_simulations}"
         )
 
         synapse.simulation_output = generate_simulations(
-            asset=simulation_input.asset,
+            asset=asset,
             start_time=simulation_input.start_time,
             time_increment=simulation_input.time_increment,
             time_length=simulation_input.time_length,
             num_simulations=simulation_input.num_simulations,
         )
+
+        try:
+            output = synapse.simulation_output
+            start_unix = output[0]
+            dt = output[1]
+            paths = output[2:]
+            num_paths = len(paths)
+            path_len = len(paths[0]) if num_paths > 0 else 0
+
+            # Log a compact summary of the response shape and a small sample.
+            head_sample = paths[0][:3] if num_paths > 0 and len(paths[0]) >= 3 else []
+            tail_sample = paths[0][-3:] if num_paths > 0 and len(paths[0]) >= 3 else []
+            bt.logging.info(
+                "Miner response summary: asset=%s, start_unix=%s, dt=%s, "
+                "num_paths=%d, path_len=%d, first_path_head=%s, first_path_tail=%s",
+                asset,
+                start_unix,
+                dt,
+                num_paths,
+                path_len,
+                head_sample,
+                tail_sample,
+            )
+        except Exception as e:  # noqa: BLE001
+            bt.logging.warning(f"Failed to log miner response summary: {e}")
 
         return synapse
 
