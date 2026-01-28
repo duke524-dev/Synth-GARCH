@@ -229,16 +229,16 @@ def simulate_single_price_path_gjr_garch_t(
             r_t = float(np.clip(r_t, -r_t_max, r_t_max))
 
         # Log large return components once per path to help debug clamping.
-        if (
-            not logged_overflow_warning
-            and abs(r_t) > 0.5 * r_t_max
-        ):
-            bt.logging.warning("GJR-GARCH step clamp: asset=%s, t=%d", asset, t)
-            bt.logging.warning("  mu=%s", mu)
-            bt.logging.warning("  sigma_t=%s", sigma_t)
-            bt.logging.warning("  eps=%s", eps)
-            bt.logging.warning("  r_t=%s", r_t)
-            logged_overflow_warning = True
+        # if (
+        #     not logged_overflow_warning
+        #     and abs(r_t) > 0.5 * r_t_max
+        # ):
+        #     bt.logging.warning("GJR-GARCH step clamp: asset=%s, t=%d", asset, t)
+        #     bt.logging.warning("  mu=%s", mu)
+        #     bt.logging.warning("  sigma_t=%s", sigma_t)
+        #     bt.logging.warning("  eps=%s", eps)
+        #     bt.logging.warning("  r_t=%s", r_t)
+        #     logged_overflow_warning = True
 
         # Update price using log-returns (percent to fraction).
         prices[t] = prices[t - 1] * np.exp(r_t / 100.0)
