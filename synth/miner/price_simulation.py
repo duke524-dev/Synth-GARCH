@@ -50,6 +50,21 @@ def _get_asset_vol_scale(asset: str) -> float:
     base = ASSET_BASE_SIGMA.get(asset, 0.005)
     return base * 100.0
 
+
+def _get_ret_scale() -> float:
+    """
+    Return the volatility/return scaling factor for simulated paths
+    (default 1.0). Set SYNTH_RET_SCALE in the environment to shrink
+    dispersion and improve CRPS (e.g. 0.4–0.6).
+    """
+    s = os.environ.get("SYNTH_RET_SCALE")
+    if s is None:
+        return 1.0
+    try:
+        return float(s)
+    except ValueError:
+        return 1.0
+
 pyth_base_url = "https://hermes.pyth.network/v2/updates/price/latest"
 
 
@@ -304,7 +319,8 @@ def simulate_single_price_path_gbm(
     if num_steps <= 0:
         return np.array([current_price], dtype=float)
 
-    std_dev = sigma * np.sqrt(dt)
+    ret_scale = _get_ret_scale()
+    std_dev = sigma * np.sqrt(dt) * ret_scale
     price_change_pcts = np.random.normal(0, std_dev, size=num_steps)
     cumulative_returns = np.cumprod(1 + price_change_pcts)
     cumulative_returns = np.insert(cumulative_returns, 0, 1.0)
